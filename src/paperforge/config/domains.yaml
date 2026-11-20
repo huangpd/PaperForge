@@ -1,0 +1,21 @@
+# Heuristic domain sampling for the bootstrap corpus (common-sense rules, NOT a classifier).
+# First matching domain wins (top to bottom). `share` values must sum to 1.
+sample_parts: [10, 30, 50]      # offline parquet parts to draw from (parts are DOI-ordered, so spread them out)
+domains:
+  bioinformatics:
+    share: 0.10
+    journal_regex: "bioinformat|computational biolog|genom|proteom|systems biology"
+  computer:
+    share: 0.28
+    doi_prefixes: ["10.1145", "10.1109"]        # ACM, IEEE
+    journal_regex: "comput|machine learning|neural|software|artificial intelligence|data mining|informatics|robot"
+  medicine:
+    share: 0.30
+    doi_prefixes: ["10.1097", "10.4103"]        # Wolters Kluwer Health, Medknow
+    journal_regex: "medic|clinical|cancer|surg|oncolog|disease|health|patholog|cardio|pharmac|nursing|psychiatr"
+  life_science:
+    share: 0.20
+    doi_prefixes: ["10.1371"]                   # PLOS
+    journal_regex: "biolog|cell|neuro|ecolog|plant|molecular|protein|biochem|microb|immun|genetic"
+  other:
+    share: 0.12                                 # everything else (control group)

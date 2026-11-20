@@ -1,0 +1,33 @@
+version: 2
+sources:
+  - name: ods
+    schema: ods
+    tables:
+      - name: crossref_works
+        columns: [{name: doi_norm, data_tests: [unique, not_null]}]
+      - name: arxiv_works
+        columns: [{name: arxiv_id, data_tests: [unique, not_null]}]
+      - name: ingestion_batch
+  - name: dwd
+    schema: dwd
+    tables:
+      - name: paper
+        columns:
+          - {name: paper_id, data_tests: [unique, not_null]}
+          - {name: paper_key, data_tests: [unique, not_null]}
+          - {name: primary_doi, data_tests: [unique, {regex_match: {arguments: {pattern: '^10\.[0-9]{4,9}/[^[:space:]]+$'}}}]}
+      - name: paper_arxiv
+        columns:
+          - {name: arxiv_id, data_tests: [unique, not_null]}
+          - {name: paper_id, data_tests: [not_null]}
+          - {name: primary_category, data_tests: [not_null]}
+      - name: paper_identifier
+      - name: paper_version
+      - name: paper_author
+      - name: paper_reference
+  - name: meta
+    schema: meta
+    tables:
+      - name: quarantine_record
+      - name: quality_rule
+      - name: quality_result

@@ -1,0 +1,118 @@
+version: 2
+
+models:
+  - name: stg_paper
+    config:
+      meta: {"grain": "one paper", "primary_key": "paper_id", "unique_constraints": "paper_id; paper_key; doi (when present)", "update_strategy": "view: always reflects dwd.paper"}
+    description: "1:1 view of dwd.paper with completeness flags. Responsibility: rename + flags only."
+    columns:
+      - {name: paper_id, data_tests: [unique, not_null]}
+      - {name: paper_key, data_tests: [unique, not_null]}
+      - {name: doi, data_tests: [unique]}
+      - {name: reference_count, data_tests: [non_negative]}
+      - {name: cited_by_count, data_tests: [non_negative]}
+  - name: stg_paper_version
+    config:
+      meta: {"grain": "one version", "primary_key": "(paper_id, version_no)", "unique_constraints": "(paper_id, version_no)", "update_strategy": "view"}
+    description: "1:1 view of dwd.paper_version metadata (no snapshot payload)."
+    columns:
+      - {name: paper_id, data_tests: [not_null, {relationships: {arguments: {to: ref('stg_paper'), field: paper_id}}}]}
+  - name: stg_paper_issn
+    config:
+      meta: {"grain": "one (paper, ISSN)", "primary_key": "(paper_id, issn)", "unique_constraints": "(paper_id, issn)", "update_strategy": "view"}
+    description: "One row per (paper, ISSN)."
+    columns:
+      - {name: issn, data_tests: [not_null, {regex_match: {arguments: {pattern: '^[0-9]{4}-[0-9]{3}[0-9X]$'}}}]}
+  - name: stg_quarantine
+    config:
+      meta: {"grain": "one quarantine row", "primary_key": "id", "unique_constraints": "id", "update_strategy": "view"}
+    columns:
+      - {name: status, data_tests: [{accepted_values: {arguments: {values: [open, replayed, discarded]}}}]}
+  - name: int_issn_journal
+    config:
+      meta: {"grain": "one ISSN", "primary_key": "issn", "unique_constraints": "issn", "update_strategy": "table: full rebuild each dbt run"}
+    description: "ISSN -> deterministic journal key (min co-listed ISSN). One-hop, identifier-only."
+    columns:
+      - {name: issn, data_tests: [unique, not_null]}
+      - {name: journal_key, data_tests: [not_null]}
+  - name: int_paper_keys
+    config:
+      meta: {"grain": "one paper", "primary_key": "paper_id", "unique_constraints": "paper_id", "update_strategy": "table: full rebuild each dbt run"}
+    description: "paper -> journal_key / publisher_key (NULL if no explicit identifier)."
+    columns:
+      - {name: paper_id, data_tests: [unique, not_null]}
+      - name: journal_key
+        data_tests: [{relationships: {arguments: {to: ref('dim_journal'), field: journal_key}}}]
+      - name: publisher_key
+        data_tests: [{relationships: {arguments: {to: ref('dim_publisher'), field: publisher_key}}}]
+
+  - name: dim_journal
+    config:
+      meta: {"grain": "one journal key (ISSN-derived)", "primary_key": "journal_key", "unique_constraints": "journal_key", "update_strategy": "table: full rebuild"}
+    description: "Journal dimension keyed by ISSN-derived key. Names never merge journals."
+    columns:
+      - {name: journal_key, data_tests: [unique, not_null]}
+  - name: dim_publisher
+    config:
+      meta: {"grain": "one Crossref member id", "primary_key": "publisher_key", "unique_constraints": "publisher_key", "update_strategy": "table: full rebuild"}
+    description: "Publisher dimension keyed by Crossref member id."
+    columns:
+      - {name: publisher_key, data_tests: [unique, not_null]}
+  - name: dim_date
+    config:
+      meta: {"grain": "one calendar day", "primary_key": "date_key", "unique_constraints": "date_key; date_day", "update_strategy": "table: full rebuild"}
+    columns:
+      - {name: date_key, data_tests: [unique, not_null]}
+      - {name: date_day, data_tests: [unique, not_null]}
+
+  - name: dws_journal_statistics
+    config:
+      meta: {"grain": "one journal key", "primary_key": "journal_key", "unique_constraints": "journal_key", "update_strategy": "table: full rebuild"}
+    description: "Grain journal_key. Table materialization."
+    columns:
+      - {name: journal_key, data_tests: [unique, not_null, {relationships: {arguments: {to: ref('dim_journal'), field: journal_key}}}]}
+      - {name: paper_count, data_tests: [non_negative]}
+  - name: dws_publisher_statistics
+    config:
+      meta: {"grain": "one publisher key", "primary_key": "publisher_key", "unique_constraints": "publisher_key", "update_strategy": "table: full rebuild"}
+    description: "Grain publisher_key. Table materialization."
+    columns:
+      - {name: publisher_key, data_tests: [unique, not_null, {relationships: {arguments: {to: ref('dim_publisher'), field: publisher_key}}}]}
+  - name: dws_publication_year_statistics
+    config:
+      meta: {"grain": "one publication year", "primary_key": "issued_year", "unique_constraints": "issued_year", "update_strategy": "table: full rebuild"}
+    description: "Grain issued_year. Table materialization."
+    columns:
+      - {name: issued_year, data_tests: [unique, not_null]}
+  - name: dws_data_quality_daily
+    config:
+      meta: {"grain": "one UTC day of paper creation", "primary_key": "stat_date", "unique_constraints": "stat_date", "update_strategy": "incremental: delete+insert of days touched since watermark (lookback 1h)"}
+    description: "Grain stat_date. Incremental (delete+insert on touched dates)."
+    columns:
+      - {name: stat_date, data_tests: [unique, not_null]}
+      - name: title_rate
+        data_tests: [{rate_at_least: {arguments: {threshold: 0.99}, config: {severity: warn}}}]
+      - name: authors_rate
+        data_tests: [{rate_at_least: {arguments: {threshold: 0.80}, config: {severity: warn}}}]
+  - name: dws_paper_change_daily
+    config:
+      meta: {"grain": "one UTC day of version writes", "primary_key": "change_date", "unique_constraints": "change_date", "update_strategy": "incremental: append-only source, re-count from last day"}
+    description: "Grain change_date. Incremental over append-only paper_version."
+    columns:
+      - {name: change_date, data_tests: [unique, not_null]}
+
+  - name: ads_paper_search
+    config:
+      meta: {"grain": "one paper", "primary_key": "paper_id", "unique_constraints": "paper_id", "update_strategy": "table: full rebuild; GIN index on search_tsv"}
+    description: "Grain paper_id. Search table with weighted tsvector + GIN index."
+    columns:
+      - {name: paper_id, data_tests: [unique, not_null]}
+      - {name: search_tsv, data_tests: [not_null]}
+  - name: ads_paper_overview
+    config:
+      meta: {"grain": "single row", "primary_key": "-", "unique_constraints": "-", "update_strategy": "view"}
+    description: "Single-row headline numbers (view)."
+  - name: ads_quality_overview
+    config:
+      meta: {"grain": "one rule (latest result)", "primary_key": "rule_id", "unique_constraints": "rule_id", "update_strategy": "view over meta.quality_result"}
+    description: "Latest quality run per rule (view over meta.quality_result)."

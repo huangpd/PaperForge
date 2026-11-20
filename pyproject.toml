@@ -1,0 +1,38 @@
+[project]
+name = "paperforge"
+version = "0.1.0"
+description = "Lightweight scholarly data engineering platform"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "httpx[socks]",
+  "tenacity",
+  "polars",
+  "pandera[polars]",
+  "duckdb",
+  "pyarrow",
+  "confluent-kafka",
+  "psycopg[binary]",
+  "pydantic>=2",
+  "pydantic-settings",
+  "pyyaml",
+  "typer",
+  "fastapi",
+  "uvicorn",
+  "psycopg-pool>=3.3.3",
+]
+
+[dependency-groups]
+dev = ["pytest", "ruff"]
+dbt = ["dbt-core", "dbt-postgres"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/paperforge"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["integration: needs docker services", "e2e: end to end"]

@@ -1,0 +1,14 @@
+# Airflow only schedules. Business logic runs through the paperforge CLI installed in its OWN virtualenv (/opt/pf-venv),
+# so Airflow's pinned dependencies and ours (polars, pydantic, dbt, ...) never have to be resolved together.
+FROM apache/airflow:3.3.1-python3.12
+USER root
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+RUN mkdir -p /opt/pf-venv /opt/paperforge && chown -R airflow /opt/pf-venv /opt/paperforge
+USER airflow
+WORKDIR /opt/paperforge
+ENV UV_PROJECT_ENVIRONMENT=/opt/pf-venv UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1
+COPY --chown=airflow pyproject.toml uv.lock .python-version ./
+RUN uv sync --frozen --no-install-project --no-dev --group dbt
+COPY --chown=airflow src ./src
+COPY --chown=airflow migrations ./migrations
+RUN uv sync --frozen --no-dev --group dbt

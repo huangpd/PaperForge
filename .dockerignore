@@ -1,0 +1,9 @@
+.venv
+data
+dbt/target
+dbt/logs
+frontend/node_modules
+.git
+**/__pycache__
+.pytest_cache
+.env
